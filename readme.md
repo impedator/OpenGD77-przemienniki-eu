@@ -1,7 +1,7 @@
 
 ## OpenGD77 - Przemienniki.eu
 
-Ten skrypt pobiera dane o przemiennikach z serwisu [przemienniki.eu](https://przemienniki.eu), filtruje je według trybów (np. DMR, FM), i generuje pliki CSV z szczegółowymi informacjami o przemiennikach.
+Ten skrypt pobiera dane o przemiennikach z serwisu [przemienniki.eu](https://przemienniki.eu), filtruje je według trybów (np. DMR, FM), i generuje pliki CSV kompatybilne z OpenGD77 CPS.
 
 ### Zawartość projektu
 
@@ -26,7 +26,7 @@ Ten skrypt pobiera dane o przemiennikach z serwisu [przemienniki.eu](https://prz
 
    Skrypt można uruchomić w środowisku Python, aby wygenerować pliki CSV:
    ```bash
-   python your_script.py
+   python convert.py
    ```
 
 ### Wymagania
@@ -43,14 +43,10 @@ pip install requests geopy pyyaml
 
 Skrypt generuje dwa pliki CSV:
 
-1. **channels.csv** – Zawiera szczegółowe informacje o przemiennikach, takie jak:
-   - Numer kanału
-   - Nazwa kanału (np. `SR7T-Digi` lub `SR7T-FM`)
-   - Częstotliwość RX i TX
-   - Typ kanału (Cyfrowy lub Analogowy)
-   - Kody kolorów, czasy nadawania, i inne dane techniczne
+1. **channels.csv**
+2. **zones.csv**
 
-2. **zones.csv** – Zawiera informacje o strefach (zones), w których znajdują się przemienniki, na podstawie pliku `convert.yaml`.
+zawartość plików można zaimportować w oprogramowaniu OpenGD77 CPS
 
 ### Przykład pliku `convert.yaml`
 
@@ -58,6 +54,12 @@ Plik `convert.yaml` zawiera informacje o strefach i parametrach zapytania, np.:
 
 ```yaml
 Country: Poland
+QueryParams:
+  Band: "70cm,2m"
+  Mode: "fm,dmr"
+  Prefix: "sr9"
+  Status: "working"
+  Distance: "100"
 Zones:
   Krakow:
     Latitude: 50.0412773
@@ -67,21 +69,11 @@ Zones:
     Latitude: 52.2198423
     Longitude: 21.0359520
     MaxDistance: 150
+  BialaPodl:
+    Latitude: 52.0287157
+    Longitude: 23.1226839
+    MaxDistance: 100
 ```
-
-### Struktura pliku `channels.csv`
-
-Plik `channels.csv` zawiera następujące kolumny:
-
-1. **Numer kanału**
-2. **Nazwa kanału**
-3. **Typ kanału** (Cyfrowy lub Analogowy)
-4. **Częstotliwość RX** (z przecinkiem, np. `438,875`)
-5. **Częstotliwość TX**
-6. **Szerokość pasma (kHz)** (dla analogowych 12,5 kHz)
-7. **Kod koloru** (dla cyfrowych)
-8. **Czas nadawania (TOT)**
-9. **Szczegóły lokalizacji (szerokość i długość geograficzna)**
 
 ### Licencja
 
