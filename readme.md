@@ -47,6 +47,7 @@ Skrypt generuje dwa pliki CSV:
 2. **zones.csv**
 
 zawartość plików można zaimportować w oprogramowaniu OpenGD77 CPS
+dla przemienników DWR Color Code są generowane ze znaków SR9 ma CC 9 SR1 ma CC 1, należy o tym pamiętać, niestety nie ma w obydwu serwisach pola które by zawierało taką informację.
 
 ### Przykład pliku `convert.yaml`
 
@@ -54,12 +55,17 @@ Plik `convert.yaml` zawiera informacje o strefach i parametrach zapytania, np.:
 
 ```yaml
 Country: Poland
+DataSource: przemienniki.net #możliwe wartości przemienniki.net oraz przemienniki.eu
 QueryParams:
-  Band: "70cm,2m"
-  Mode: "fm,dmr"
-  Prefix: "sr9"
-  Status: "working"
-  Distance: "100"
+  przemienniki.eu:
+    Band: "70cm,2m"
+    Mode: "fm,dmr"
+    Prefix: "sr9"
+    Status: "working"
+    Distance: "100"  
+  przemienniki.net:
+    Band: "2m,70cm"
+    Mode: "FM,MOTOTRBO"
 Zones:
   Krakow:
     Latitude: 50.0412773
@@ -69,10 +75,6 @@ Zones:
     Latitude: 52.2198423
     Longitude: 21.0359520
     MaxDistance: 150
-  BialaPodl:
-    Latitude: 52.0287157
-    Longitude: 23.1226839
-    MaxDistance: 100
 ```
 
 ### Licencja
