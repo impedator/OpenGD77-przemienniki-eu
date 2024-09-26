@@ -14,28 +14,16 @@ zones = config['Zones']
 # Base URL for querying przemienniki.eu
 base_url = "https://przemienniki.eu/eksport-danych/json/"
 
-# Define CSV file structure based on the requested format
-zones_file = "zones.csv"
-channels_file = "channels.csv"
-
 # Set the User-Agent to simulate a real browser (latest Firefox)
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:117.0) Gecko/20100101 Firefox/117.0'
 }
 
-# Open zones.csv for writing
-with open(zones_file, mode="w", newline="") as zones_csv:
-    zones_writer = csv.writer(zones_csv)
-    # Write header for zones.csv (OpenGD77 format)
-    zones_writer.writerow(["ZoneName", "ZoneDescription"])
-
-    # Write zones from YAML
-    for zone_name, zone_info in zones.items():
-        zone_description = f"{zone_name} Zone"
-        zones_writer.writerow([zone_name, zone_description])
+# Prepare to store the channels for later use in zones.csv
+channels = []
 
 # Open channels.csv for writing with the new format
-with open(channels_file, mode="w", newline="") as channels_csv:
+with open("Channels.csv", mode="w", newline="") as channels_csv:
     channels_writer = csv.writer(channels_csv, delimiter=';')
     # Write header for channels.csv (your requested format)
     channels_writer.writerow([
@@ -114,7 +102,7 @@ with open(channels_file, mode="w", newline="") as channels_csv:
                     timeslot = ""
                     rx_tone = rx_ctcss if rx_ctcss not in [False, "false", ""] else ""
                     tx_tone = tx_ctcss if tx_ctcss not in [False, "false", ""] else ""
-                else :
+                else:
                     continue
 
                 # Default values for specific columns
@@ -130,14 +118,47 @@ with open(channels_file, mode="w", newline="") as channels_csv:
                 
                 # Write the data to channels.csv
                 channels_writer.writerow([
-                    channel_number, channel_name, channel_type, format_number(receive_freq), format_number(transmit_freq), 
+                    channel_number, channel_name, channel_type, receive_freq, transmit_freq, 
                     bandwidth, colour_code, timeslot, "", "", "", "", "", 
-                    rx_tone, tx_tone, "", power, rx_only, 
+                    format_number(rx_tone), format_number(tx_tone), "", power, rx_only, 
                     zone_skip, all_skip, tot, vox, no_beep, no_eco, aprs, 
                     format_number(repeater_lat), format_number(repeater_lon)  # Format lat and lon
                 ])
                 
+                # Add to channel list for use in zones.csv
+                channels.append({
+                    "ZoneName": zone_name,
+                    "Channel Name": channel_name,
+                    "Channel Type": channel_type,
+                    "Channel Number": channel_number
+                })
+
                 channel_number += 1  # Increment channel number for each mode
 
-print(f"Generated {zones_file} and {channels_file} successfully.")
+print("Channels.csv has been generated successfully.")
 
+# Open zones.csv for writing
+with open("Zones.csv", mode="w", newline="") as zones_csv:
+    zones_writer = csv.writer(zones_csv, delimiter=';')
+
+    # Write the header (Zone Name; Channel1; Channel2; ... Channel77)
+    header = ["Zone Name"] + [f"Channel{i}" for i in range(1, 78)]
+    zones_writer.writerow(header)
+
+    # Process each zone from the YAML configuration
+    for zone_name, zone_info in zones.items():
+        # Separate channels into Digital and Analogue
+        digital_channels = [ch['Channel Name'] for ch in channels if ch['ZoneName'] == zone_name and ch['Channel Type'] == 'Digital']
+        analogue_channels = [ch['Channel Name'] for ch in channels if ch['ZoneName'] == zone_name and ch['Channel Type'] == 'Analogue']
+
+        # Create Digital Zone (e.g., Krakow-DIGI)
+        digital_zone_name = f"{zone_name}-DIGI"
+        digital_row = [digital_zone_name] + digital_channels[:77]  # Max 77 channels
+        zones_writer.writerow(digital_row)
+
+        # Create Analogue Zone (e.g., Krakow-FM)
+        analogue_zone_name = f"{zone_name}-FM"
+        analogue_row = [analogue_zone_name] + analogue_channels[:77]  # Max 77 channels
+        zones_writer.writerow(analogue_row)
+
+print("Zones.csv has been generated successfully.")
