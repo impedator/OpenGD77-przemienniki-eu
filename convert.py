@@ -1,6 +1,7 @@
 import requests
 import csv
 import yaml
+import xml.etree.ElementTree as ET  # For parsing XML data (przemienniki.net)
 from geopy.distance import geodesic
 
 # Load configuration from the YAML file
@@ -8,157 +9,165 @@ with open("convert.yaml", "r") as yaml_file:
     config = yaml.safe_load(yaml_file)
 
 country = config['Country']
+data_source = config['DataSource']
 query_params = config['QueryParams']
 zones = config['Zones']
 
-# Base URL for querying przemienniki.eu
-base_url = "https://przemienniki.eu/eksport-danych/json/"
-
-# Set the User-Agent to simulate a real browser (latest Firefox)
-headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:117.0) Gecko/20100101 Firefox/117.0'
-}
+# Helper function to format numbers
+def format_number(value):
+    return str(value).replace('.', ',') if isinstance(value, (float, int)) else value
 
 # Prepare to store the channels for later use in zones.csv
 channels = []
 
-# Open channels.csv for writing with the new format
-with open("Channels.csv", mode="w", newline="") as channels_csv:
+# Function to handle przemienniki.eu (JSON data)
+def fetch_from_przemienniki_eu(zone_name, zone_info):
+    zone_lat = zone_info['Latitude']
+    zone_lon = zone_info['Longitude']
+    max_distance = zone_info['MaxDistance']
+    
+    url = (f"https://przemienniki.eu/eksport-danych/json/"
+           f"?band={query_params['przemienniki.eu']['Band']}"
+           f"&mode={query_params['przemienniki.eu']['Mode']}"
+           f"&status={query_params['przemienniki.eu']['Status']}"
+           f"&coordinates={zone_lat},{zone_lon}&distance={max_distance}")
+    
+    response = requests.get(url)
+    if response.status_code == 200:
+        try:
+            return response.json()  # Return JSON data for processing
+        except ValueError:
+            print(f"Error: Could not parse JSON for zone {zone_name}.")
+            return []
+    else:
+        print(f"Error: Failed to fetch data from przemienniki.eu for {zone_name}.")
+        return []
+
+# Function to handle przemienniki.net (XML data)
+def fetch_from_przemienniki_net(zone_name, zone_info):
+    zone_lat = zone_info['Latitude']
+    zone_lon = zone_info['Longitude']
+    max_distance = zone_info['MaxDistance']
+    
+    url = (f"https://przemienniki.net/export/rxf.xml"
+           f"?latitude={zone_lat}&longitude={zone_lon}&range={max_distance}"
+           f"&mode={query_params['przemienniki.net']['Mode']}")
+    
+    response = requests.get(url)
+    if response.status_code == 200:
+        try:
+            # Parse the XML response
+            tree = ET.ElementTree(ET.fromstring(response.content))
+            return tree  # Return parsed XML tree
+        except ET.ParseError:
+            print(f"Error: Could not parse XML for zone {zone_name}.")
+            return None
+    else:
+        print(f"Error: Failed to fetch data from przemienniki.net for {zone_name}.")
+        return None
+
+# Open channels.csv for writing
+with open("channels.csv", mode="w", newline="") as channels_csv:
     channels_writer = csv.writer(channels_csv, delimiter=';')
-    # Write header for channels.csv (your requested format)
     channels_writer.writerow([
-        "Channel Number", "Channel Name", "Channel Type", "Rx Frequency", "Tx Frequency", 
+        "Channel Number", "Channel Name", "Channel Type", "Rx Frequency", "Tx Frequency",
         "Bandwidth (kHz)", "Colour Code", "Timeslot", "Contact", "TG List", "DMR ID", 
-        "TS1_TA_Tx ID", "TS2_TA_Tx ID", "RX Tone", "TX Tone", "Squelch", "Power", "Rx Only", 
-        "Zone Skip", "All Skip", "TOT", "VOX", "No Beep", "No Eco", "APRS", "Latitude", "Longitude"
+        "TS1_TA_Tx ID", "TS2_TA_Tx ID", "RX Tone", "TX Tone", "Squelch", "Power", 
+        "Rx Only", "Zone Skip", "All Skip", "TOT", "VOX", "No Beep", "No Eco", "APRS",
+        "Latitude", "Longitude"
     ])
 
-    channel_number = 1  # Starting channel number
+    channel_number = 1  # Initialize channel number
 
-    # Helper function to replace dots with commas in numerical strings
-    def format_number(value):
-        return str(value).replace('.', ',') if isinstance(value, (float, int)) else value
-
-    # Loop through each zone and query przemienniki.eu for repeaters
+    # Loop through zones and fetch data from the appropriate source
     for zone_name, zone_info in zones.items():
-        zone_lat = zone_info['Latitude']
-        zone_lon = zone_info['Longitude']
-        max_distance = zone_info['MaxDistance']
+        if data_source == "przemienniki.eu":
+            repeaters = fetch_from_przemienniki_eu(zone_name, zone_info)
+        elif data_source == "przemienniki.net":
+            xml_tree = fetch_from_przemienniki_net(zone_name, zone_info)
+            if xml_tree is not None:
+                repeaters = []
+                # Parse XML structure for przemienniki.net
+                for repeater in xml_tree.findall('.//repeater'):
+                    modes = repeater.find('mode').text.split(',')
+                    callsign = repeater.find('qra').text
+                    # rx_freq = format_number(repeater.find('rx').text)
+                    # tx_freq = format_number(repeater.find('tx').text)
+                    lat = repeater.find('location/latitude').text
+                    lon = repeater.find('location/longitude').text
 
-        # Construct the URL with coordinates and max distance (without prefix)
-        url = (f"{base_url}?band={query_params.get('Band', '70cm')}&status={query_params.get('Status', 'working')}"
-               f"&coordinates={zone_lat},{zone_lon}&distance={max_distance}")
-
-        print(f"Querying {zone_name} with URL: {url}")
-        
-        # Fetch data for the current zone with headers (User-Agent)
-        response = requests.get(url, headers=headers)
-
-        # Check if the response was successful
-        if response.status_code == 200:
-            try:
-                # Attempt to parse the response as JSON
-                repeaters = response.json()
-            except requests.exceptions.JSONDecodeError:
-                print(f"Error: Unable to parse the response as JSON for {zone_name}.")
-                print("Response content:", response.text)
-                continue
+                    rx_freq = ""
+                    tx_freq = ""
+                    for qrg in repeater.findall('qrg'):
+                        if qrg.attrib['type'] == 'rx':
+                            rx_freq = format_number(qrg.text)
+                        elif qrg.attrib['type'] == 'tx':
+                            tx_freq = format_number(qrg.text)
+                    repeaters.append({
+                        "callsign": callsign,
+                        "rx_frequency": rx_freq,
+                        "tx_frequency": tx_freq,
+                        "modes": modes,
+                        "latitude": lat,
+                        "longitude": lon
+                    })
+            else:
+                repeaters = []
         else:
-            print(f"Error: Failed to fetch data for {zone_name}. Status code: {response.status_code}")
-            print("Response content:", response.text)
+            print(f"Unsupported data source: {data_source}")
             continue
 
-        # Process repeaters and add them to the channels.csv
+        # Process each repeater for channels.csv
         for repeater in repeaters:
-            # Extract latitude and longitude from the coordinates array
-            coordinates = repeater.get("coordinates", [None, None])
-            repeater_lat = coordinates[0]  # First element is latitude
-            repeater_lon = coordinates[1]  # Second element is longitude
-            
-            receive_freq = format_number(repeater.get("rx_frequency", ""))  # Correct field name and replace dot with comma
-            transmit_freq = format_number(repeater.get("tx_frequency", ""))  # Correct field name and replace dot with comma
-            callsign = repeater.get("callsign", "")
-            modes = repeater.get("modes", [])  # Fetch the list of modes from JSON
-            rx_ctcss = repeater.get("rx_ctcss", "")
-            tx_ctcss = repeater.get("tx_ctcss", "")
-            
-            # Process each mode and create a separate channel
-            for mode in modes:
-                if mode == "dmr":
-                    # Create Digital channel
+            for mode in repeater['modes']:
+                if mode.lower() == "dmr" or mode.lower() == "mototrbo":
                     channel_type = "Digital"
-                    channel_name = f"{callsign}-Digi"
-                    bandwidth = ""
-                    colour_code = callsign[2] if len(callsign) > 2 else ""
+                    channel_name = f"{repeater['callsign']}-Digi"
                     timeslot = "1"
-                    rx_tone = ""
-                    tx_tone = ""
-                elif mode == "fm":
-                    # Create Analogue channel
+                    colour_code = repeater['callsign'][2] if len(repeater['callsign']) > 2 else ""
+                elif mode.lower() == "fm":
                     channel_type = "Analogue"
-                    channel_name = f"{callsign}-{mode.upper()}"
-                    bandwidth = "12,5"
-                    colour_code = ""
+                    channel_name = f"{repeater['callsign']}-FM"
                     timeslot = ""
-                    rx_tone = rx_ctcss if rx_ctcss not in [False, "false", ""] else ""
-                    tx_tone = tx_ctcss if tx_ctcss not in [False, "false", ""] else ""
+                    colour_code = ""
                 else:
-                    continue
-
-                # Default values for specific columns
-                power = "Master"      # Placeholder for 'Power' 
-                rx_only = "No"        # Placeholder for 'Rx Only'
-                zone_skip = "No"      # Placeholder for 'Zone Skip'
-                all_skip = "No"       # Placeholder for 'All Skip'
-                tot = "60"            # Placeholder for 'TOT'
-                vox = "No"            # Placeholder for 'VOX'
-                no_beep = "No"        # Placeholder for 'No Beep'
-                no_eco = "No"         # Placeholder for 'No Eco'
-                aprs = "No"           # Placeholder for 'APRS'
+                    continue  # Skip unsupported modes
                 
-                # Write the data to channels.csv
+                # Write to channels.csv
                 channels_writer.writerow([
-                    channel_number, channel_name, channel_type, receive_freq, transmit_freq, 
-                    bandwidth, colour_code, timeslot, "", "", "", "", "", 
-                    format_number(rx_tone), format_number(tx_tone), "", power, rx_only, 
-                    zone_skip, all_skip, tot, vox, no_beep, no_eco, aprs, 
-                    format_number(repeater_lat), format_number(repeater_lon)  # Format lat and lon
+                    channel_number, channel_name, channel_type, repeater['rx_frequency'], 
+                    repeater['tx_frequency'], "", colour_code, timeslot, "", "", "", "", "", 
+                    "", "", "", "Master", "No", "No", "No", "60", "No", "No", "No", 
+                    format_number(repeater['latitude']), format_number(repeater['longitude'])
                 ])
                 
-                # Add to channel list for use in zones.csv
+                # Add to list for zones.csv
                 channels.append({
                     "ZoneName": zone_name,
                     "Channel Name": channel_name,
                     "Channel Type": channel_type,
                     "Channel Number": channel_number
                 })
+                channel_number += 1
 
-                channel_number += 1  # Increment channel number for each mode
+print("channels.csv has been generated successfully.")
 
-print("Channels.csv has been generated successfully.")
-
-# Open zones.csv for writing
-with open("Zones.csv", mode="w", newline="") as zones_csv:
+# Generate zones.csv
+with open("zones.csv", mode="w", newline="") as zones_csv:
     zones_writer = csv.writer(zones_csv, delimiter=';')
-
-    # Write the header (Zone Name; Channel1; Channel2; ... Channel77)
     header = ["Zone Name"] + [f"Channel{i}" for i in range(1, 78)]
     zones_writer.writerow(header)
 
-    # Process each zone from the YAML configuration
-    for zone_name, zone_info in zones.items():
-        # Separate channels into Digital and Analogue
+    for zone_name in zones:
         digital_channels = [ch['Channel Name'] for ch in channels if ch['ZoneName'] == zone_name and ch['Channel Type'] == 'Digital']
         analogue_channels = [ch['Channel Name'] for ch in channels if ch['ZoneName'] == zone_name and ch['Channel Type'] == 'Analogue']
 
-        # Create Digital Zone (e.g., Krakow-DIGI)
-        digital_zone_name = f"{zone_name}-DIGI"
-        digital_row = [digital_zone_name] + digital_channels[:77]  # Max 77 channels
+        # Digital Zone (e.g., Krakow-DIGI)
+        digital_row = [f"{zone_name}-DIGI"] + digital_channels[:77]
         zones_writer.writerow(digital_row)
 
-        # Create Analogue Zone (e.g., Krakow-FM)
-        analogue_zone_name = f"{zone_name}-FM"
-        analogue_row = [analogue_zone_name] + analogue_channels[:77]  # Max 77 channels
+        # Analogue Zone (e.g., Krakow-FM)
+        analogue_row = [f"{zone_name}-FM"] + analogue_channels[:77]
         zones_writer.writerow(analogue_row)
 
-print("Zones.csv has been generated successfully.")
+print("zones.csv has been generated successfully.")

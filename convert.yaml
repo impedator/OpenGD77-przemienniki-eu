@@ -1,10 +1,15 @@
 Country: Poland
+DataSource: przemienniki.net
 QueryParams:
-  Band: "70cm,2m"
-  Mode: "fm,dmr"
-  Prefix: "sr9"
-  Status: "working"
-  Distance: "100"  
+  przemienniki.eu:
+    Band: "70cm,2m"
+    Mode: "fm,dmr"
+    Prefix: "sr9"
+    Status: "working"
+    Distance: "100"  
+  przemienniki.net:
+    Band: "2m,70cm"
+    Mode: "FM,MOTOTRBO"
 Zones:
   Krakow:
     Latitude: 50.0412773
