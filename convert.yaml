@@ -1,0 +1,21 @@
+Country: Poland
+QueryParams:
+  Band: "70cm,2m"
+  Mode: "fm,dmr"
+  Prefix: "sr9"
+  Status: "working"
+  Distance: "100"  
+Zones:
+  Krakow:
+    Latitude: 50.0412773
+    Longitude: 19.9476007
+    MaxDistance: 100
+  Warszawa:
+    Latitude: 52.2198423
+    Longitude: 21.0359520
+    MaxDistance: 150
+  BialaPodl:
+    Latitude: 52.0287157
+    Longitude: 23.1226839
+    MaxDistance: 100
+
